@@ -1,0 +1,42 @@
+name: sonido-selecto
+
+services:
+  radio:
+    build:
+      context: .
+      target: runtime
+    image: sonido-selecto-cli:1.0.0
+    # curses needs a real terminal: use `docker compose run --rm radio`.
+    stdin_open: true
+    tty: true
+    init: true
+
+    environment:
+      TERM: ${TERM:-xterm-256color}
+      # Audio through PulseAudio / PipeWire, the usual Linux desktop setup.
+      PULSE_SERVER: unix:/run/pulse/native
+      PULSE_COOKIE: /run/pulse/cookie
+    volumes:
+      - ${XDG_RUNTIME_DIR:-/run/user/1000}/pulse/native:/run/pulse/native
+      - ${HOME}/.config/pulse/cookie:/run/pulse/cookie:ro
+
+    # ALSA alternative for hosts without a sound server: comment out the two
+    # PULSE_* variables and the volumes above, then uncomment this.
+    # devices:
+    #   - /dev/snd:/dev/snd
+    # group_add:
+    #   - audio
+
+    # Measured while playing: ~45 MiB of RAM and ~3% of one core.
+    mem_limit: 128m
+    cpus: 0.5
+    pids_limit: 64
+
+    # The container only reads from the network and writes to the terminal.
+    read_only: true
+    tmpfs:
+      - /tmp:size=8m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

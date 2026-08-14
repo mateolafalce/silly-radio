@@ -1,0 +1,5 @@
+*
+!pyproject.toml
+!README.md
+!selecto_radio/
+selecto_radio/__pycache__/
