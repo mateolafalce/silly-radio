@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="Sonido Selecto CLI" width="320">
 </div>
 
-A minimalist terminal radio that plays [Sonido Selecto FM 102.9](https://sonidoselecto.com/radio/). The screen displays only the station name and the currently playing song, centered in black text on the terminal's default background.
+A minimalist terminal radio that plays [Sonido Selecto FM 102.9](https://sonidoselecto.com/radio/). The screen displays the station name centered and, right below it, the currently playing song scrolling from right to left. Both lines are drawn in pure black on the terminal's default background, and the song is also published in the terminal's title bar.
 
 ## Requirements
 
@@ -41,7 +41,7 @@ Playback starts automatically.
 
 ## Docker
 
-An alternative that requires neither Python nor `mpv` on the host — only Docker and Docker Compose:
+An alternative that requires neither Python nor `mpv` on the host, only Docker and Docker Compose:
 
 ```bash
 docker compose run --rm radio

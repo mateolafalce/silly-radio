@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import curses
 import locale
+import sys
 import time
 
 from . import __version__
@@ -12,6 +13,10 @@ from .metadata import MetadataPoller
 from .player import RadioPlayer
 
 STREAM_URL = "https://radios.solumedia.com:6590/stream"
+# Text inserted between two passes of the title so the loop is readable.
+MARQUEE_SEPARATOR = "   ***   "
+# Scrolling speed in characters per second, independent of --fps.
+MARQUEE_SPEED = 6.0
 
 
 def _camera_speed(value: str) -> float:
@@ -92,6 +97,48 @@ def _draw_centered_line(
     _safe_addstr(screen, y, x, visible_text, attr)
 
 
+def marquee_frame(text: str, width: int, offset: int) -> str:
+    """Return the `width` characters of `text` visible at `offset`.
+
+    The text scrolls from right to left in an endless loop. If it already fits
+    on the line it is centered and stays still.
+    """
+    if width <= 0:
+        return ""
+    text = " ".join(text.split())
+    if not text:
+        return " " * width
+    if len(text) <= width:
+        padding = width - len(text)
+        left = padding // 2
+        return " " * left + text + " " * (padding - left)
+    loop = text + MARQUEE_SEPARATOR
+    start = offset % len(loop)
+    repeats = (start + width) // len(loop) + 1
+    return (loop * repeats)[start : start + width]
+
+
+def _draw_marquee_line(
+    screen: curses.window,
+    y: int,
+    text: str,
+    elapsed: float,
+    attr: int = 0,
+) -> None:
+    _, width = screen.getmaxyx()
+    offset = int(elapsed * MARQUEE_SPEED)
+    _safe_addstr(screen, y, 0, marquee_frame(text, max(0, width - 1), offset), attr)
+
+
+def _set_terminal_title(text: str) -> None:
+    """Publish the track in the terminal's own title bar (ignored if unsupported)."""
+    try:
+        sys.stdout.write(f"\033]2;{text}\007")
+        sys.stdout.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def run(screen: curses.window, args: argparse.Namespace) -> None:
     locale.setlocale(locale.LC_ALL, "")
     curses.curs_set(0)
@@ -105,6 +152,8 @@ def run(screen: curses.window, args: argparse.Namespace) -> None:
     if not args.no_audio:
         player.play()
 
+    start_time = time.monotonic()
+    shown_title = ""
     try:
         while True:
             started = time.monotonic()
@@ -125,10 +174,16 @@ def run(screen: curses.window, args: argparse.Namespace) -> None:
             if not player.error and player.requested_playing and not player.is_playing and not args.no_audio:
                 player.play()
 
-            text_attr = curses.color_pair(1) | curses.A_BOLD if curses.has_colors() else curses.A_BOLD
+            # No A_BOLD: bold turns COLOR_BLACK into bright black (gray) on most
+            # terminals, and both lines must stay 100% black.
+            text_attr = curses.color_pair(1) if curses.has_colors() else 0
+            title = metadata.title
+            if title != shown_title:
+                shown_title = title
+                _set_terminal_title(title)
             top = max(0, (height - 2) // 2)
             _draw_centered_line(screen, top, "SONIDO SELECTO 102.9", text_attr)
-            _draw_centered_line(screen, top + 1, f"Now playing: {metadata.title}", text_attr)
+            _draw_marquee_line(screen, top + 1, title, started - start_time, text_attr)
             screen.refresh()
 
             elapsed = time.monotonic() - started

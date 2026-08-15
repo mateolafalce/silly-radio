@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- The currently playing song, on the line below the station name, scrolls from right to left in an endless loop when it does not fit on the line. The track is also published in the terminal's own title bar.
 - `radio` console script as the primary command. `sonido-selecto` is kept as an alias so existing launch scripts keep working; the argparse `prog` and the image's `ENTRYPOINT` now use `radio`.
 - MIT license in the `LICENSE` file, which had previously only been declared in `pyproject.toml`.
 - Development dependencies (`ruff`, `pre-commit`) in the `dev` extra in `pyproject.toml`.
@@ -18,6 +19,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Multi-stage `Dockerfile` (Alpine + `mpv`) and `docker-compose.yml` so the player can be run with `docker compose run --rm radio`, with the host sound server exposed through the PulseAudio socket and the container limited to 128 MiB, half a CPU, and 64 processes.
 - `.dockerignore` restricting the build context to `pyproject.toml`, `README.md`, and the package itself.
 - This changelog.
+
+### Changed
+
+- The two lines on screen are drawn without `A_BOLD`, because bold turns `COLOR_BLACK` into bright black (gray) on most terminals and they must be 100% black.
+- The song line no longer carries the `Now playing:` prefix, so the whole width is available for the scrolling title.
 
 ### Removed
 
