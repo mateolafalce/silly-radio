@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import shutil
+import socket
 import subprocess
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -12,16 +16,19 @@ class Backend:
     executable: str
     name: str
 
-    def command(self, stream_url: str, volume: int) -> list[str]:
+    def command(self, stream_url: str, volume: int, ipc_path: str | None = None) -> list[str]:
         if self.name == "mpv":
-            return [
+            command = [
                 self.executable,
                 "--no-video",
                 "--really-quiet",
                 "--no-terminal",
                 f"--volume={volume}",
-                stream_url,
             ]
+            if ipc_path is not None:
+                command.append(f"--input-ipc-server={ipc_path}")
+            command.append(stream_url)
+            return command
         if self.name == "ffplay":
             return [
                 self.executable,
@@ -54,8 +61,8 @@ def find_backend() -> Backend | None:
 class RadioPlayer:
     """Manage a live stream process.
 
-    Restarting a live stream is equivalent to resuming it at the current live
-    position. This keeps controls consistent across all supported backends.
+    mpv supports live volume changes through JSON IPC. Other backends restart
+    the live stream when the volume changes.
     """
 
     def __init__(self, stream_url: str, volume: int = 100) -> None:
@@ -63,6 +70,11 @@ class RadioPlayer:
         self.volume = max(0, min(100, volume))
         self.previous_volume = self.volume or 100
         self.backend = find_backend()
+        self._ipc_directory: tempfile.TemporaryDirectory[str] | None = None
+        self._ipc_path: str | None = None
+        if self.backend is not None and self.backend.name == "mpv":
+            self._ipc_directory = tempfile.TemporaryDirectory(prefix="silly-radio-")
+            self._ipc_path = str(Path(self._ipc_directory.name) / "mpv.sock")
         self.process: subprocess.Popen[bytes] | None = None
         self.requested_playing = False
         self.error = ""
@@ -87,7 +99,7 @@ class RadioPlayer:
             self.process = None
         try:
             self.process = subprocess.Popen(
-                self.backend.command(self.stream_url, self.volume),
+                self.backend.command(self.stream_url, self.volume, self._ipc_path),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -117,7 +129,7 @@ class RadioPlayer:
         if volume == self.volume:
             return
         self.volume = volume
-        self._restart_if_playing()
+        self._apply_volume_if_playing()
 
     def change_volume(self, delta: int) -> None:
         self.set_volume(self.volume + delta)
@@ -128,6 +140,32 @@ class RadioPlayer:
     def close(self) -> None:
         self.requested_playing = False
         self._stop_process()
+
+        if self._ipc_directory is not None:
+            self._ipc_directory.cleanup()
+            self._ipc_directory = None
+            self._ipc_path = None
+
+    def _apply_volume_if_playing(self) -> None:
+        if not self.requested_playing:
+            return
+        if self.backend is not None and self.backend.name == "mpv" and self._send_mpv_volume():
+            return
+        self._restart_if_playing()
+
+    def _send_mpv_volume(self) -> bool:
+        if not self.is_playing or self._ipc_path is None:
+            return False
+
+        message = json.dumps({"command": ["set_property", "volume", self.volume]}) + "\n"
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as ipc_socket:
+                ipc_socket.settimeout(0.2)
+                ipc_socket.connect(self._ipc_path)
+                ipc_socket.sendall(message.encode("utf-8"))
+        except OSError:
+            return False
+        return True
 
     def _restart_if_playing(self) -> None:
         if not self.requested_playing:
@@ -146,3 +184,5 @@ class RadioPlayer:
                 self.process.kill()
                 self.process.wait(timeout=1.0)
         self.process = None
+        if self._ipc_path is not None:
+            Path(self._ipc_path).unlink(missing_ok=True)
