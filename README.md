@@ -1,4 +1,6 @@
-# Sonido Selecto CLI
+<div align="center">
+  <img src="assets/logo.png" alt="Sonido Selecto CLI" width="320">
+</div>
 
 A minimalist terminal radio that plays [Sonido Selecto FM 102.9](https://sonidoselecto.com/radio/). The screen displays only the station name and the currently playing song, centered in black text on the terminal's default background.
 
