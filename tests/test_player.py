@@ -39,9 +39,7 @@ class PlayerTests(unittest.TestCase):
         self.assertIn("--input-ipc-server=/tmp/radio-mpv.sock", command)
 
     def test_mpv_volume_changes_use_ipc_without_restarting(self) -> None:
-        with patch(
-            "selecto_radio.player.find_backend", return_value=Backend("/usr/bin/mpv", "mpv")
-        ):
+        with patch("selecto_radio.player.find_backend", return_value=Backend("/usr/bin/mpv", "mpv")):
             player = RadioPlayer("https://radio.test/stream", volume=65)
         player.process = MagicMock()
         player.process.poll.return_value = None
@@ -57,9 +55,7 @@ class PlayerTests(unittest.TestCase):
         player.close()
 
     def test_mpv_ipc_sends_the_current_volume(self) -> None:
-        with patch(
-            "selecto_radio.player.find_backend", return_value=Backend("/usr/bin/mpv", "mpv")
-        ):
+        with patch("selecto_radio.player.find_backend", return_value=Backend("/usr/bin/mpv", "mpv")):
             player = RadioPlayer("https://radio.test/stream", volume=65)
         player.process = MagicMock()
         player.process.poll.return_value = None
@@ -70,15 +66,11 @@ class PlayerTests(unittest.TestCase):
 
         self.assertTrue(sent)
         ipc_socket.connect.assert_called_once_with(player._ipc_path)
-        ipc_socket.sendall.assert_called_once_with(
-            b'{"command": ["set_property", "volume", 65]}\n'
-        )
+        ipc_socket.sendall.assert_called_once_with(b'{"command": ["set_property", "volume", 65]}\n')
         player.close()
 
     def test_mpv_volume_change_restarts_when_ipc_fails(self) -> None:
-        with patch(
-            "selecto_radio.player.find_backend", return_value=Backend("/usr/bin/mpv", "mpv")
-        ):
+        with patch("selecto_radio.player.find_backend", return_value=Backend("/usr/bin/mpv", "mpv")):
             player = RadioPlayer("https://radio.test/stream", volume=65)
         player.process = MagicMock()
         player.process.poll.return_value = None
