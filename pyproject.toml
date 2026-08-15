@@ -12,6 +12,9 @@ dependencies = []
 license = {text = "MIT"}
 authors = [{name = "Mateo", email = "mateolafalce3@gmail.com"}]
 
+[tool.setuptools]
+packages = ["selecto_radio"]
+
 [project.optional-dependencies]
 dev = [
     "ruff>=0.6",
