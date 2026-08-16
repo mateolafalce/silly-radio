@@ -7,16 +7,50 @@ import curses
 import locale
 import sys
 import time
+from typing import Protocol, cast
 
 from . import __version__
-from .metadata import MetadataPoller
+from .metadata import MetadataPoller, sanitize_title
 from .player import RadioPlayer
 
 STREAM_URL = "https://radios.solumedia.com:6590/stream"
 # Text inserted between two passes of the title so the loop is readable.
 MARQUEE_SEPARATOR = "   ***   "
-# Scrolling speed in characters per second, independent of --fps.
+# Scrolling speed in characters per second.
 MARQUEE_SPEED = 6.0
+# Seconds between redraws. The marquee offset only advances MARQUEE_SPEED times
+# per second, so a faster loop would redraw identical frames and a slower one
+# would make the scroll skip characters; twice MARQUEE_SPEED also keeps key
+# latency low, because getch() is polled once per pass.
+FRAME_INTERVAL = 1 / (MARQUEE_SPEED * 2)
+
+
+class DrawingScreen(Protocol):
+    """Small curses surface used by the rendering helpers."""
+
+    def getmaxyx(self) -> tuple[int, int]: ...
+
+    def addnstr(self, y: int, x: int, text: str, length: int, attr: int = 0) -> None: ...
+
+
+class CursesScreen(DrawingScreen, Protocol):
+    """Curses operations required by the application loop."""
+
+    def nodelay(self, flag: bool) -> None: ...
+
+    def keypad(self, flag: bool) -> None: ...
+
+    def getch(self) -> int: ...
+
+    def erase(self) -> None: ...
+
+    def refresh(self) -> None: ...
+
+
+class AppArgs(Protocol):
+    stream: str
+    volume: int
+    no_audio: bool
 
 
 def _camera_speed(value: str) -> float:
@@ -33,7 +67,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--stream", default=STREAM_URL, help="audio stream URL")
     parser.add_argument("--volume", type=int, choices=range(0, 101), default=100, metavar="0-100")
-    parser.add_argument("--fps", type=int, choices=range(1, 31), default=10, metavar="1-30")
     # Kept as hidden no-op options so existing launch scripts do not break after
     # replacing the old pipes scene.
     parser.add_argument("--seed", type=int, default=99, help=argparse.SUPPRESS)
@@ -75,7 +108,7 @@ def _fit(text: str, width: int) -> str:
     return text[: max(0, width - 3)] + ("..." if width >= 3 else "")
 
 
-def _safe_addstr(screen: curses.window, y: int, x: int, text: str, attr: int = 0) -> None:
+def _safe_addstr(screen: DrawingScreen, y: int, x: int, text: str, attr: int = 0) -> None:
     height, width = screen.getmaxyx()
     if not (0 <= y < height and 0 <= x < width):
         return
@@ -86,7 +119,7 @@ def _safe_addstr(screen: curses.window, y: int, x: int, text: str, attr: int = 0
 
 
 def _draw_centered_line(
-    screen: curses.window,
+    screen: DrawingScreen,
     y: int,
     text: str,
     attr: int = 0,
@@ -119,7 +152,7 @@ def marquee_frame(text: str, width: int, offset: int) -> str:
 
 
 def _draw_marquee_line(
-    screen: curses.window,
+    screen: DrawingScreen,
     y: int,
     text: str,
     elapsed: float,
@@ -133,13 +166,13 @@ def _draw_marquee_line(
 def _set_terminal_title(text: str) -> None:
     """Publish the track in the terminal's own title bar (ignored if unsupported)."""
     try:
-        sys.stdout.write(f"\033]2;{text}\007")
+        sys.stdout.write(f"\033]2;{sanitize_title(text)}\007")
         sys.stdout.flush()
     except (OSError, ValueError):
         pass
 
 
-def run(screen: curses.window, args: argparse.Namespace) -> None:
+def run(screen: CursesScreen, args: AppArgs) -> None:
     locale.setlocale(locale.LC_ALL, "")
     curses.curs_set(0)
     screen.nodelay(True)
@@ -181,20 +214,23 @@ def run(screen: curses.window, args: argparse.Namespace) -> None:
             if title != shown_title:
                 shown_title = title
                 _set_terminal_title(title)
-            top = max(0, (height - 2) // 2)
+            errors = [message for message in (player.error, metadata.error) if message]
+            top = max(0, (height - (3 if errors else 2)) // 2)
             _draw_centered_line(screen, top, "SONIDO SELECTO 102.9", text_attr)
             _draw_marquee_line(screen, top + 1, title, started - start_time, text_attr)
+            if errors:
+                _draw_centered_line(screen, top + 2, f"Error: {' | '.join(errors)}", text_attr)
             screen.refresh()
 
             elapsed = time.monotonic() - started
-            time.sleep(max(0.0, 1 / args.fps - elapsed))
+            time.sleep(max(0.0, FRAME_INTERVAL - elapsed))
     finally:
         metadata.close()
         player.close()
 
 
 def main(argv: list[str] | None = None) -> None:
-    args = build_parser().parse_args(argv)
+    args = cast(AppArgs, build_parser().parse_args(argv))
     try:
         curses.wrapper(run, args)
     except KeyboardInterrupt:
