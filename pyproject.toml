@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sonido-selecto-cli"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Minimalist Sonido Selecto radio CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -20,6 +20,9 @@ dev = [
     "ruff>=0.6",
     "pre-commit>=3.7",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "selecto_radio.__version__"}
 
 [project.scripts]
 radio = "selecto_radio.app:main"
