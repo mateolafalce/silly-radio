@@ -14,6 +14,9 @@ authors = [{name = "Mateo", email = "mateolafalce3@gmail.com"}]
 
 [project.optional-dependencies]
 dev = [
+    "bandit[toml]>=1.7.9",
+    "coverage>=7.6",
+    "mypy>=1.11",
     "ruff>=0.6",
     "pre-commit>=3.7",
 ]
@@ -32,3 +35,20 @@ select = ["E", "W", "F", "I", "UP", "B", "C4"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["selecto_radio"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["selecto_radio", "tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["selecto_radio"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 90
+
+[tool.bandit]
+exclude_dirs = ["tests"]
