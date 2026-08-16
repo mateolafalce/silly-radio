@@ -5,40 +5,88 @@ from __future__ import annotations
 import json
 import shutil
 import socket
-import subprocess
+
+# External playback is this module's purpose; process creation never invokes a shell.
+import subprocess  # nosec B404
 import tempfile
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
-class Backend:
-    executable: str
-    name: str
+class Backend(ABC):
+    """Playback backend with its own command and optional live controls."""
 
-    def command(self, stream_url: str, volume: int, ipc_path: str | None = None) -> list[str]:
-        if self.name == "mpv":
-            command = [
-                self.executable,
-                "--no-video",
-                "--really-quiet",
-                "--no-terminal",
-                f"--volume={volume}",
-            ]
-            if ipc_path is not None:
-                command.append(f"--input-ipc-server={ipc_path}")
-            command.append(stream_url)
-            return command
-        if self.name == "ffplay":
-            return [
-                self.executable,
-                "-nodisp",
-                "-loglevel",
-                "quiet",
-                "-volume",
-                str(volume),
-                stream_url,
-            ]
+    executable: str
+    name: ClassVar[str]
+    uses_control_socket: ClassVar[bool] = False
+
+    @abstractmethod
+    def command(self, stream_url: str, volume: int, control_path: str | None = None) -> list[str]:
+        """Build the subprocess command for this backend."""
+
+    def set_live_volume(self, control_path: str | None, volume: int) -> bool:
+        """Apply a volume change without restarting, if supported."""
+        return False
+
+
+@dataclass(frozen=True)
+class MpvBackend(Backend):
+    name: ClassVar[str] = "mpv"
+    uses_control_socket: ClassVar[bool] = True
+
+    def command(self, stream_url: str, volume: int, control_path: str | None = None) -> list[str]:
+        command = [
+            self.executable,
+            "--no-video",
+            "--really-quiet",
+            "--no-terminal",
+            f"--volume={volume}",
+        ]
+        if control_path is not None:
+            command.append(f"--input-ipc-server={control_path}")
+        command.append(stream_url)
+        return command
+
+    def set_live_volume(self, control_path: str | None, volume: int) -> bool:
+        if control_path is None:
+            return False
+
+        message = json.dumps({"command": ["set_property", "volume", volume]}) + "\n"
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as ipc_socket:
+                ipc_socket.settimeout(0.2)
+                ipc_socket.connect(control_path)
+                ipc_socket.sendall(message.encode("utf-8"))
+        except OSError:
+            return False
+        return True
+
+
+@dataclass(frozen=True)
+class FfplayBackend(Backend):
+    name: ClassVar[str] = "ffplay"
+
+    def command(self, stream_url: str, volume: int, control_path: str | None = None) -> list[str]:
+        return [
+            self.executable,
+            "-nodisp",
+            "-loglevel",
+            "quiet",
+            "-volume",
+            str(volume),
+            stream_url,
+        ]
+
+
+@dataclass(frozen=True)
+class VlcBackend(Backend):
+    name: ClassVar[str] = "vlc"
+
+    def command(self, stream_url: str, volume: int, control_path: str | None = None) -> list[str]:
         return [
             self.executable,
             "--intf",
@@ -49,12 +97,20 @@ class Backend:
         ]
 
 
+BACKEND_CANDIDATES: Sequence[tuple[str, type[Backend]]] = (
+    ("mpv", MpvBackend),
+    ("ffplay", FfplayBackend),
+    ("cvlc", VlcBackend),
+    ("vlc", VlcBackend),
+)
+
+
 def find_backend() -> Backend | None:
     """Return the first supported player found in PATH."""
-    for executable, name in (("mpv", "mpv"), ("ffplay", "ffplay"), ("cvlc", "vlc"), ("vlc", "vlc")):
+    for executable, backend_type in BACKEND_CANDIDATES:
         path = shutil.which(executable)
         if path:
-            return Backend(path, name)
+            return backend_type(path)
     return None
 
 
@@ -72,7 +128,7 @@ class RadioPlayer:
         self.backend = find_backend()
         self._ipc_directory: tempfile.TemporaryDirectory[str] | None = None
         self._ipc_path: str | None = None
-        if self.backend is not None and self.backend.name == "mpv":
+        if self.backend is not None and self.backend.uses_control_socket:
             self._ipc_directory = tempfile.TemporaryDirectory(prefix="silly-radio-")
             self._ipc_path = str(Path(self._ipc_directory.name) / "mpv.sock")
         self.process: subprocess.Popen[bytes] | None = None
@@ -98,7 +154,8 @@ class RadioPlayer:
             self.process.wait()
             self.process = None
         try:
-            self.process = subprocess.Popen(
+            # The executable is resolved from BACKEND_CANDIDATES, a fixed allowlist.
+            self.process = subprocess.Popen(  # nosec B603
                 self.backend.command(self.stream_url, self.volume, self._ipc_path),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
@@ -149,23 +206,14 @@ class RadioPlayer:
     def _apply_volume_if_playing(self) -> None:
         if not self.requested_playing:
             return
-        if self.backend is not None and self.backend.name == "mpv" and self._send_mpv_volume():
+        if self._send_live_volume():
             return
         self._restart_if_playing()
 
-    def _send_mpv_volume(self) -> bool:
-        if not self.is_playing or self._ipc_path is None:
+    def _send_live_volume(self) -> bool:
+        if not self.is_playing or self.backend is None:
             return False
-
-        message = json.dumps({"command": ["set_property", "volume", self.volume]}) + "\n"
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as ipc_socket:
-                ipc_socket.settimeout(0.2)
-                ipc_socket.connect(self._ipc_path)
-                ipc_socket.sendall(message.encode("utf-8"))
-        except OSError:
-            return False
-        return True
+        return self.backend.set_live_volume(self._ipc_path, self.volume)
 
     def _restart_if_playing(self) -> None:
         if not self.requested_playing:

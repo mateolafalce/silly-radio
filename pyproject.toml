@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sonido-selecto-cli"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Minimalist Sonido Selecto radio CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -17,9 +17,15 @@ packages = ["selecto_radio"]
 
 [project.optional-dependencies]
 dev = [
+    "bandit[toml]>=1.7.9",
+    "coverage>=7.6",
+    "mypy>=1.11",
     "ruff>=0.6",
     "pre-commit>=3.7",
 ]
+
+[tool.setuptools.dynamic]
+version = {attr = "selecto_radio.__version__"}
 
 [project.scripts]
 radio = "selecto_radio.app:main"
@@ -35,3 +41,20 @@ select = ["E", "W", "F", "I", "UP", "B", "C4"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["selecto_radio"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["selecto_radio", "tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["selecto_radio"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 90
+
+[tool.bandit]
+exclude_dirs = ["tests"]

@@ -53,7 +53,7 @@ Extra CLI options go at the end:
 
 ```bash
 docker compose run --rm radio --no-audio
-docker compose run --rm radio --volume 60 --fps 5
+docker compose run --rm radio --volume 60
 ```
 
 The container uses the desktop sound server (PulseAudio or PipeWire) through the `${XDG_RUNTIME_DIR}/pulse/native` socket. For systems without a sound server, `docker-compose.yml` includes a commented-out ALSA variant (`/dev/snd`).
@@ -75,10 +75,10 @@ Measured usage while playing: about 45 MiB of RAM and 3% of one core. `docker-co
 --no-audio      Show the station without playing audio
 --volume 0-100  Set the initial volume
 --stream URL    Play another compatible stream
---fps 1-30      Set the screen refresh rate
 ```
 
-The stream and metadata are fetched directly from the public services used by the station's website.
+The stream and metadata are fetched directly from the public services used by the station's website. Playback
+or metadata failures are shown in the interface while the last valid track title remains visible.
 
 ## Development
 

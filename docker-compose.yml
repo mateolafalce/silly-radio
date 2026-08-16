@@ -5,7 +5,7 @@ services:
     build:
       context: .
       target: runtime
-    image: sonido-selecto-cli:1.0.0
+    image: sonido-selecto-cli
     # curses needs a real terminal: use `docker compose run --rm radio`.
     stdin_open: true
     tty: true
