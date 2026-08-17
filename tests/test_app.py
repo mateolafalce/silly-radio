@@ -8,6 +8,7 @@ from unittest.mock import patch
 from selecto_radio.app import (
     FRAME_INTERVAL,
     MARQUEE_SEPARATOR,
+    _apply_mpris_commands,
     _draw_centered_line,
     _safe_addstr,
     _set_terminal_title,
@@ -16,6 +17,7 @@ from selecto_radio.app import (
     marquee_frame,
     run,
 )
+from selecto_radio.mpris import MprisCommand
 
 
 class FakeScreen:
@@ -81,11 +83,20 @@ class FakePlayer:
         self.requested_playing = not self.requested_playing
         self.is_playing = self.requested_playing
 
+    def pause(self) -> None:
+        self.events.append("pause")
+        self.requested_playing = False
+        self.is_playing = False
+
     def toggle_mute(self) -> None:
         self.events.append("mute")
 
     def change_volume(self, delta: int) -> None:
         self.events.append(("volume", delta))
+
+    def set_volume(self, volume: int) -> None:
+        self.events.append(("set_volume", volume))
+        self.volume = volume
 
     def close(self) -> None:
         self.events.append("close")
@@ -108,7 +119,61 @@ class FakeMetadata:
         self.closed = True
 
 
+class FakeArtwork:
+    instances: list["FakeArtwork"] = []
+
+    def __init__(self) -> None:
+        self.image_url = "https://th.wallhaven.cc/lg/ab/example.jpg"
+        self.events: list[str] = []
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.events.append("start")
+
+    def close(self) -> None:
+        self.events.append("close")
+
+
+class FakeMpris:
+    instances: list["FakeMpris"] = []
+
+    def __init__(self, stream: str, volume: int) -> None:
+        self.stream = stream
+        self.volume = volume
+        self.commands: list[MprisCommand] = []
+        self.events: list[object] = []
+        self.instances.append(self)
+
+    def start(self) -> None:
+        self.events.append("start")
+
+    def update(
+        self,
+        title: str,
+        requested_playing: bool,
+        is_playing: bool,
+        volume: int,
+        artwork_url: str = "",
+    ) -> None:
+        self.events.append(("update", title, requested_playing, is_playing, volume, artwork_url))
+
+    def drain_commands(self) -> list[MprisCommand]:
+        commands, self.commands = self.commands, []
+        return commands
+
+    def close(self) -> None:
+        self.events.append("close")
+
+
 class AppTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.artwork_patcher = patch("selecto_radio.app.RandomArtworkPoller", FakeArtwork)
+        self.artwork_patcher.start()
+        self.addCleanup(self.artwork_patcher.stop)
+        self.mpris_patcher = patch("selecto_radio.app.MprisService", FakeMpris)
+        self.mpris_patcher.start()
+        self.addCleanup(self.mpris_patcher.stop)
+
     def test_draws_text_centered(self) -> None:
         screen = FakeScreen(height=10, width=40)
 
@@ -184,18 +249,42 @@ class AppTests(unittest.TestCase):
 
         player = FakePlayer.instances[-1]
         metadata = FakeMetadata.instances[-1]
+        artwork = FakeArtwork.instances[-1]
+        mpris = FakeMpris.instances[-1]
         self.assertEqual(
             player.events,
             ["play", "toggle", "mute", ("volume", 5), ("volume", -5), "close"],
         )
         self.assertTrue(metadata.started)
         self.assertTrue(metadata.closed)
+        self.assertEqual(artwork.events, ["start", "close"])
+        self.assertEqual(mpris.events[0], "start")
+        self.assertEqual(mpris.events[-1], "close")
+        self.assertTrue(any(event[0] == "update" for event in mpris.events if isinstance(event, tuple)))
+        updates = [event for event in mpris.events if isinstance(event, tuple)]
+        self.assertTrue(all(event[-1] == artwork.image_url for event in updates))
         self.assertTrue(screen.nodelay_enabled)
         self.assertTrue(screen.keypad_enabled)
         self.assertEqual(screen.refresh_count, 4)
         self.assertEqual(sleep.call_count, 4)
         sleep.assert_called_with(FRAME_INTERVAL)
         set_title.assert_called_once_with("Artist - Track")
+
+    def test_mpris_commands_control_the_player(self) -> None:
+        player = FakePlayer("https://radio.test/stream", 60)
+        mpris = FakeMpris("https://radio.test/stream", 60)
+        mpris.commands = [
+            MprisCommand("play"),
+            MprisCommand("pause"),
+            MprisCommand("toggle"),
+            MprisCommand("volume", 35),
+        ]
+
+        _apply_mpris_commands(mpris, player)  # type: ignore[arg-type]
+
+        self.assertEqual(player.events, ["play", "pause", "toggle", ("set_volume", 35)])
+        self.assertEqual(player.volume, 35)
+        self.assertEqual(mpris.commands, [])
 
     def test_run_relaunches_an_unexpectedly_exited_player(self) -> None:
         class CrashingPlayer(FakePlayer):
@@ -281,6 +370,8 @@ class AppTests(unittest.TestCase):
             run(screen, FakeArgs(no_audio=True))
 
         self.assertEqual(FakePlayer.instances[-1].events, ["close"])
+        self.assertEqual(FakeArtwork.instances[-1].events, ["close"])
+        self.assertEqual(FakeMpris.instances[-1].events, ["close"])
 
     def test_default_volume_is_100(self) -> None:
         args = build_parser().parse_args([])

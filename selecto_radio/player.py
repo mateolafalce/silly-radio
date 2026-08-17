@@ -44,6 +44,7 @@ class MpvBackend(Backend):
             "--no-video",
             "--really-quiet",
             "--no-terminal",
+            "--audio-client-name=Sonido Selecto 102.9",
             f"--volume={volume}",
         ]
         if control_path is not None:

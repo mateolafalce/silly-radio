@@ -39,6 +39,7 @@ class PlayerTests(unittest.TestCase):
 
         self.assertEqual(mpv[-1], stream)
         self.assertIn("--volume=65", mpv)
+        self.assertIn("--audio-client-name=Sonido Selecto 102.9", mpv)
         self.assertIn("--input-ipc-server=/tmp/radio-mpv.sock", mpv)
         self.assertEqual(ffplay[-3:], ["-volume", "65", stream])
         self.assertIn("--gain=0.65", vlc)
