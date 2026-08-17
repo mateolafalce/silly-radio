@@ -8,6 +8,7 @@ A minimalist terminal radio that plays [Sonido Selecto FM 102.9](https://sonidos
 
 - Python 3.10 or later.
 - One of these media players available in `PATH`: `mpv`, `ffplay`, or `vlc`.
+- On Linux desktops, a D-Bus session is used automatically for media controls.
 
 On Ubuntu or Debian, the smallest option is:
 
@@ -39,6 +40,15 @@ You can also run it without installing the package:
 
 Playback starts automatically.
 
+On Cinnamon, GNOME, KDE, and other MPRIS-compatible desktops, the system media
+panel identifies the player as **Sonido Selecto 102.9**, displays the current
+artist and track, and can play, pause, stop, or change the radio volume. This is
+independent of browser media sessions left registered by Brave or Firefox.
+It also requests a random SFW wallpaper from Wallhaven's public API
+(`categories=110`, `purity=100`) and uses its large thumbnail as temporary cover
+art, rotating it every minute. If a request fails, the last valid image
+remains; before the first successful request, the desktop's default icon is used.
+
 ## Docker
 
 An alternative that requires neither Python nor `mpv` on the host, only Docker and Docker Compose:
@@ -57,6 +67,9 @@ docker compose run --rm radio --volume 60
 ```
 
 The container uses the desktop sound server (PulseAudio or PipeWire) through the `${XDG_RUNTIME_DIR}/pulse/native` socket. For systems without a sound server, `docker-compose.yml` includes a commented-out ALSA variant (`/dev/snd`).
+
+Desktop media-panel integration is disabled inside the container unless the
+host's D-Bus session is exposed explicitly; audio playback does not depend on it.
 
 Measured usage while playing: about 45 MiB of RAM and 3% of one core. `docker-compose.yml` caps the container at 128 MiB, half a CPU, and 64 processes, and runs it unprivileged, read-only, and as a non-root user.
 

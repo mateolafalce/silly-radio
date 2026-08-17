@@ -10,7 +10,9 @@ import time
 from typing import Protocol, cast
 
 from . import __version__
+from .artwork import RandomArtworkPoller
 from .metadata import MetadataPoller, sanitize_title
+from .mpris import MprisService
 from .player import RadioPlayer
 
 STREAM_URL = "https://radios.solumedia.com:6590/stream"
@@ -172,6 +174,18 @@ def _set_terminal_title(text: str) -> None:
         pass
 
 
+def _apply_mpris_commands(mpris: MprisService, player: RadioPlayer) -> None:
+    for command in mpris.drain_commands():
+        if command.name == "play":
+            player.play()
+        elif command.name == "pause":
+            player.pause()
+        elif command.name == "toggle":
+            player.toggle()
+        elif command.name == "volume" and command.value is not None:
+            player.set_volume(command.value)
+
+
 def run(screen: CursesScreen, args: AppArgs) -> None:
     locale.setlocale(locale.LC_ALL, "")
     curses.curs_set(0)
@@ -181,15 +195,20 @@ def run(screen: CursesScreen, args: AppArgs) -> None:
 
     player = RadioPlayer(args.stream, args.volume)
     metadata = MetadataPoller()
+    artwork = RandomArtworkPoller()
+    mpris = MprisService(args.stream, args.volume)
     metadata.start()
     if not args.no_audio:
         player.play()
+        artwork.start()
+        mpris.start()
 
     start_time = time.monotonic()
     shown_title = ""
     try:
         while True:
             started = time.monotonic()
+            _apply_mpris_commands(mpris, player)
             key = screen.getch()
             if key in (ord("q"), ord("Q"), 27):
                 break
@@ -211,6 +230,14 @@ def run(screen: CursesScreen, args: AppArgs) -> None:
             # terminals, and both lines must stay 100% black.
             text_attr = curses.color_pair(1) if curses.has_colors() else 0
             title = metadata.title
+            if not args.no_audio:
+                mpris.update(
+                    title,
+                    player.requested_playing,
+                    player.is_playing,
+                    player.volume,
+                    artwork.image_url,
+                )
             if title != shown_title:
                 shown_title = title
                 _set_terminal_title(title)
@@ -225,6 +252,8 @@ def run(screen: CursesScreen, args: AppArgs) -> None:
             elapsed = time.monotonic() - started
             time.sleep(max(0.0, FRAME_INTERVAL - elapsed))
     finally:
+        mpris.close()
+        artwork.close()
         metadata.close()
         player.close()
 

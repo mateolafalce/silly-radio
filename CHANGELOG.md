@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- A random SFW image from Wallhaven (`categories=110`, `purity=100`) is published as temporary MPRIS cover art and rotated every minute, retaining the last valid image when a refresh fails.
+- MPRIS desktop integration: Linux sound panels now identify the active player and its audio stream as Sonido Selecto, show the current artist and track, and provide working playback and volume controls instead of falling back to an idle browser session.
 - The currently playing song, on the line below the station name, scrolls from right to left in an endless loop when it does not fit on the line. The track is also published in the terminal's own title bar.
 - `radio` console script as the primary command. `sonido-selecto` is kept as an alias so existing launch scripts keep working; the argparse `prog` and the image's `ENTRYPOINT` now use `radio`.
 - MIT license in the `LICENSE` file, which had previously only been declared in `pyproject.toml`.

@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Minimalist Sonido Selecto radio CLI"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["dbus-next>=0.2.3,<1"]
 license = {text = "MIT"}
 authors = [{name = "Mateo", email = "mateolafalce3@gmail.com"}]
 
