@@ -1,6 +1,7 @@
 import threading
 import unittest
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 from selecto_radio.artwork import (
     WALLHAVEN_API_URL,
@@ -14,6 +15,13 @@ SECOND_IMAGE = "https://th.wallhaven.cc/lg/xy/wallhaven-xyz123.jpg"
 
 
 class ArtworkTests(unittest.TestCase):
+    def test_default_search_includes_all_categories_and_safe_purities(self) -> None:
+        query = parse_qs(urlsplit(WALLHAVEN_API_URL).query)
+
+        self.assertEqual(query["categories"], ["111"])
+        self.assertEqual(query["purity"], ["110"])
+        self.assertEqual(query["sorting"], ["random"])
+
     def test_parses_first_safe_large_thumbnail(self) -> None:
         payload = (
             b'{"data": ['

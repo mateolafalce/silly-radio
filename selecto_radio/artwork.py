@@ -8,7 +8,7 @@ import urllib.request
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
-WALLHAVEN_API_URL = "https://wallhaven.cc/api/v1/search?categories=110&purity=100&sorting=random&order=desc"
+WALLHAVEN_API_URL = "https://wallhaven.cc/api/v1/search?categories=111&purity=110&sorting=random&order=desc"
 ArtworkFetcher = Callable[[str, float], str]
 
 
@@ -33,7 +33,7 @@ def parse_artwork_url(payload: bytes) -> str:
 
 
 def fetch_random_artwork(url: str = WALLHAVEN_API_URL, timeout: float = 5.0) -> str:
-    """Fetch one random SFW wallpaper thumbnail URL from Wallhaven."""
+    """Fetch one random SFW or sketchy wallpaper thumbnail URL from Wallhaven."""
     parsed = urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname != "wallhaven.cc":
         raise ValueError("artwork URL must use HTTPS on wallhaven.cc")
