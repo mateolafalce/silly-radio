@@ -44,10 +44,11 @@ On Cinnamon, GNOME, KDE, and other MPRIS-compatible desktops, the system media
 panel identifies the player as **Sonido Selecto 102.9**, displays the current
 artist and track, and can play, pause, stop, or change the radio volume. This is
 independent of browser media sessions left registered by Brave or Firefox.
-It also requests a random SFW wallpaper from Wallhaven's public API
-(`categories=110`, `purity=100`) and uses its large thumbnail as temporary cover
-art, rotating it every minute. If a request fails, the last valid image
-remains; before the first successful request, the desktop's default icon is used.
+It also requests a random SFW or Sketchy wallpaper from all three Wallhaven
+categories (`categories=111`, `purity=110`) and uses its large thumbnail as
+temporary cover art, rotating it every minute. If a request fails, the last
+valid image remains; before the first successful request, the desktop's default
+icon is used.
 
 ## Docker
 
